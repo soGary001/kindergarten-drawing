@@ -4,6 +4,7 @@ mod settings;
 mod gallery;
 mod prompt;
 mod image_gen;
+mod asr;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
