@@ -34,49 +34,40 @@ pub fn start_capture(tx: UnboundedSender<Vec<u8>>) -> Result<MicHandle, String> 
     let sample_format = config.sample_format();
 
     std::thread::spawn(move || {
-        // step > 1 means we skip input samples; < 1 means we duplicate (shouldn't happen
-        // for any normal device since mic rates are >= 16 kHz, but handled correctly).
-        let step = in_rate / 16_000.0_f32;
+        // Decimation ratio: how many input frames per output (16 kHz) sample.
+        // e.g. 48000 -> step 3.0, 44100 -> step ~2.756.
+        let step = (in_rate / 16_000.0_f32).max(1.0);
 
         let err_fn = |e: cpal::StreamError| eprintln!("cpal stream error: {e}");
 
-        // Helper that both closures call.  We can't share one closure across the `match`
-        // arms because they capture different data types, so we replicate the logic.
-        //
-        // Each arm captures its own `pos: f32`, `buf: Vec<u8>`, and `tx` clone.
-        // pos tracks the fractional position in the INPUT stream:
-        //   - a sample at input frame `i` represents time `i / in_rate`.
-        //   - we emit output sample `n` when `pos` crosses `n` (integer boundary at output
-        //     sample index n, i.e. time n/16000).  After emitting we advance the "next
-        //     expected" output index by 1.
-        //   - Equivalently: keep `next_out: f32 = 0.0`; after processing each input
-        //     frame `i`, if `i >= next_out` emit that frame's sample and set
-        //     `next_out += step`.
-
+        // Streaming resampler: `acc` is a bounded accumulator that PERSISTS across
+        // callbacks. For each input frame we add 1.0; whenever it reaches `step` we
+        // emit one output sample and subtract `step`. This keeps `acc` in [0, step)
+        // forever, so it works correctly across callback boundaries (the previous
+        // version compared a global position against a per-buffer index, which made
+        // every callback after the first emit ~nothing -> NO_VALID_AUDIO_ERROR).
         let stream = match sample_format {
             cpal::SampleFormat::F32 => {
                 let tx2 = tx.clone();
-                let mut pos = 0.0_f32; // next output boundary in input-sample units
+                let mut acc = 0.0_f32;
                 let mut buf: Vec<u8> = Vec::with_capacity(3200);
                 device.build_input_stream(
                     &config.into(),
                     move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                        let frames = data.len() / channels;
+                        let frames = data.len() / channels.max(1);
                         for frame_idx in 0..frames {
-                            let input_pos = frame_idx as f32;
-                            if input_pos >= pos {
-                                // Mono: take channel 0
+                            acc += 1.0;
+                            if acc >= step {
+                                acc -= step;
+                                // Mono: take channel 0 of the frame.
                                 let s = data[frame_idx * channels];
                                 let sample = (s.clamp(-1.0, 1.0) * 32_767.0) as i16;
                                 let le = sample.to_le_bytes();
                                 buf.push(le[0]);
                                 buf.push(le[1]);
-                                pos += step;
                                 if buf.len() >= 3200 {
-                                    let _ = tx2.send(std::mem::replace(
-                                        &mut buf,
-                                        Vec::with_capacity(3200),
-                                    ));
+                                    let _ = tx2
+                                        .send(std::mem::replace(&mut buf, Vec::with_capacity(3200)));
                                 }
                             }
                         }
@@ -87,26 +78,52 @@ pub fn start_capture(tx: UnboundedSender<Vec<u8>>) -> Result<MicHandle, String> 
             }
             cpal::SampleFormat::I16 => {
                 let tx2 = tx.clone();
-                let mut pos = 0.0_f32;
+                let mut acc = 0.0_f32;
                 let mut buf: Vec<u8> = Vec::with_capacity(3200);
                 device.build_input_stream(
                     &config.into(),
                     move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                        let frames = data.len() / channels;
+                        let frames = data.len() / channels.max(1);
                         for frame_idx in 0..frames {
-                            let input_pos = frame_idx as f32;
-                            if input_pos >= pos {
-                                let s = data[frame_idx * channels] as f32 / 32_768.0;
-                                let sample = (s.clamp(-1.0, 1.0) * 32_767.0) as i16;
+                            acc += 1.0;
+                            if acc >= step {
+                                acc -= step;
+                                // Already i16 mono sample; pass through.
+                                let sample = data[frame_idx * channels];
                                 let le = sample.to_le_bytes();
                                 buf.push(le[0]);
                                 buf.push(le[1]);
-                                pos += step;
                                 if buf.len() >= 3200 {
-                                    let _ = tx2.send(std::mem::replace(
-                                        &mut buf,
-                                        Vec::with_capacity(3200),
-                                    ));
+                                    let _ = tx2
+                                        .send(std::mem::replace(&mut buf, Vec::with_capacity(3200)));
+                                }
+                            }
+                        }
+                    },
+                    err_fn,
+                    None,
+                )
+            }
+            cpal::SampleFormat::U16 => {
+                let tx2 = tx.clone();
+                let mut acc = 0.0_f32;
+                let mut buf: Vec<u8> = Vec::with_capacity(3200);
+                device.build_input_stream(
+                    &config.into(),
+                    move |data: &[u16], _: &cpal::InputCallbackInfo| {
+                        let frames = data.len() / channels.max(1);
+                        for frame_idx in 0..frames {
+                            acc += 1.0;
+                            if acc >= step {
+                                acc -= step;
+                                // u16 -> centered i16.
+                                let sample = (data[frame_idx * channels] as i32 - 32_768) as i16;
+                                let le = sample.to_le_bytes();
+                                buf.push(le[0]);
+                                buf.push(le[1]);
+                                if buf.len() >= 3200 {
+                                    let _ = tx2
+                                        .send(std::mem::replace(&mut buf, Vec::with_capacity(3200)));
                                 }
                             }
                         }
