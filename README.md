@@ -138,3 +138,38 @@ npm run build                                # frontend-only check
 ```
 
 Node 20+ and a stable Rust toolchain are required.
+
+---
+
+## Android (APK)
+
+### Getting the APK
+
+The Android APK is built by the `android` job in GitHub Actions — **no local Android SDK is needed**.
+
+- **Tag push**: push a `v*` tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`). The workflow creates a draft release with the APK attached alongside the desktop installers.
+- **Manual run**: go to **Actions → Release → Run workflow**. The APK is always uploaded as a run artifact named `android-apk` regardless of whether a release tag is present.
+
+Download the APK from the run's **Artifacts** section (or from the draft release) and sideload it on the device.
+
+> **Sideloading**: The APK is **debug-signed** — suitable for competition testing. On the Android device, enable **Settings → Install unknown apps** for your file manager or browser, then open the downloaded APK to install. For a Play Store / production release you must configure a release keystore; see [Tauri's Android signing docs](https://v2.tauri.app/distribute/sign/android/).
+
+### Gallery on Android
+
+The gallery is **bundled into the APK**: the four sample PNGs in `src-tauri/gallery/` (lion, fish, puppy, sun) are included as app resources at build time.
+
+To use your own competition pictures:
+
+1. Replace the files in `src-tauri/gallery/` with your own PNG/JPG/WebP images (landscape/16:9 recommended).
+2. Rebuild (push a tag or trigger the workflow). The new images will be bundled automatically.
+
+This bundled `gallery/` folder is also the **default gallery on desktop** now — the app reads from it first (via the Tauri resource directory) before falling back to the writable app-data folder.
+
+### Known Caveat — Microphone on Android (needs device testing)
+
+The Android manifest is patched by CI to include both `RECORD_AUDIO` and `INTERNET` permissions. However, microphone access from a WebView also requires the WebView to grant `getUserMedia` at the OS level at runtime. If speech recognition does not work on-device:
+
+- The generated `MainActivity` (Kotlin) may need an `onPermissionRequest` override that calls `request.grant(request.resources)` to forward the WebView's permission request to the OS.
+- This **can only be verified and fixed on a real device** — it is a pending item that requires a CI-built APK and a physical Android phone or tablet.
+
+Internet access is required on Android for the same reason as desktop (Alibaba Paraformer ASR + DashScope image generation).

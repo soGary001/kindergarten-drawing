@@ -14,9 +14,16 @@ fn app_data(app: &AppHandle) -> std::path::PathBuf {
 }
 
 fn active_gallery_dir(app: &AppHandle, s: &AppSettings) -> std::path::PathBuf {
+    // 1. Operator override (desktop): explicit folder wins.
     if let Some(d) = &s.gallery_dir { return std::path::PathBuf::from(d); }
+    // 2. Bundled default gallery (works on desktop AND Android via resource dir).
+    if let Ok(res) = app.path().resource_dir() {
+        let g = res.join("gallery");
+        if !crate::gallery::scan(&g).is_empty() { return g; }
+    }
+    // 3. Writable fallback in app data (operator can drop files here on desktop).
     let dir = app_data(app).join("gallery");
-    let _ = std::fs::create_dir_all(&dir); // ensure it exists for the operator to fill
+    let _ = std::fs::create_dir_all(&dir);
     dir
 }
 
