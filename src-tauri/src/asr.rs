@@ -136,6 +136,7 @@ const WS_URL: &str = "wss://dashscope.aliyuncs.com/api-ws/v1/inference";
 pub struct AsrSession {
     pub audio_tx: mpsc::UnboundedSender<Vec<u8>>,
     pub stop_tx: mpsc::UnboundedSender<()>,
+    pub mic: Option<crate::mic::MicHandle>,
 }
 
 /// Open the WS, start a task, stream audio from `audio_rx`, emit events to the frontend.
@@ -191,5 +192,5 @@ pub async fn run_session(app: AppHandle, api_key: String) -> Result<AsrSession, 
         }
     });
 
-    Ok(AsrSession { audio_tx, stop_tx })
+    Ok(AsrSession { audio_tx, stop_tx, mic: None })
 }

@@ -1,6 +1,5 @@
 import type { App } from '../state';
 import { api, fileUrl, onEvent } from '../api';
-import { MicStreamer } from '../audio';
 
 export function renderDescribe(root: HTMLElement, app: App) {
   const el = document.createElement('div'); el.className = 'screen';
@@ -17,7 +16,6 @@ export function renderDescribe(root: HTMLElement, app: App) {
   const mic = el.querySelector<HTMLButtonElement>('#mic')!;
   const gen = el.querySelector<HTMLButtonElement>('#gen')!;
 
-  let streamer: MicStreamer | null = null;
   let recording = false;
   let finalText = '';
   const unlisten: Array<Promise<any>> = [];
@@ -26,7 +24,6 @@ export function renderDescribe(root: HTMLElement, app: App) {
   async function cleanup() {
     if (cleaned) return;
     cleaned = true;
-    await streamer?.stop();
     try { await api.asrStop(); } catch (_) {}
     unlisten.forEach(u => u.then(f => f()));
   }
@@ -38,14 +35,12 @@ export function renderDescribe(root: HTMLElement, app: App) {
   mic.onclick = async () => {
     if (!recording) {
       try {
-        finalText=''; app.round.transcript='';
+        finalText = ''; app.round.transcript = '';
         await api.asrStart();
-        streamer = new MicStreamer((bytes)=>api.asrSendAudio(bytes));
-        await streamer.start();
         recording = true; mic.textContent = '⏹ Stop'; mic.classList.add('mint');
       } catch (e) { app.showError(String(e)); }
     } else {
-      await streamer?.stop(); await api.asrStop();
+      await api.asrStop();
       recording = false; mic.textContent = '🎤 Talk again';
       gen.classList.remove('hidden');
     }

@@ -62,22 +62,19 @@ pub async fn generate_image(app: AppHandle, transcript: String) -> Result<String
 #[tauri::command]
 pub async fn asr_start(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let key = secret::api_key();
-    let session = asr::run_session(app.clone(), key).await?;
+    let mut session = asr::run_session(app.clone(), key).await?;
+    let mic_handle = crate::mic::start_capture(session.audio_tx.clone())?;
+    session.mic = Some(mic_handle);
     *state.asr.lock().unwrap() = Some(session);
     Ok(())
 }
 
 #[tauri::command]
-pub fn asr_send_audio(state: State<AppState>, chunk: Vec<u8>) -> Result<(), String> {
-    if let Some(s) = state.asr.lock().unwrap().as_ref() {
-        s.audio_tx.send(chunk).map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
 pub fn asr_stop(state: State<AppState>) -> Result<(), String> {
-    if let Some(s) = state.asr.lock().unwrap().as_ref() { let _ = s.stop_tx.send(()); }
+    if let Some(s) = state.asr.lock().unwrap().as_ref() {
+        if let Some(m) = &s.mic { m.stop(); }
+        let _ = s.stop_tx.send(());
+    }
     Ok(())
 }
 
