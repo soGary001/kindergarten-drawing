@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "kg-tmp",
+  "productName": "Kindergarten Speaking",
   "version": "0.1.0",
   "identifier": "com.kindergarten.speaking",
   "build": {
@@ -13,9 +13,12 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "kg-tmp",
-        "width": 800,
-        "height": 600
+        "title": "Kindergarten Speaking Competition",
+        "width": 1280,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
       }
     ],
     "security": {
