@@ -18,6 +18,7 @@ struct ImageResult { #[serde(default)] url: Option<String> }
 
 /// Extract the first image URL from a DashScope image-synthesis response.
 /// Handles both top-level error envelopes and output-nested shapes.
+#[allow(dead_code)]
 pub fn first_image_url(json: &str) -> Result<String, String> {
     let resp: ImageResponse = serde_json::from_str(json)
         .map_err(|e| format!("bad image response json: {e}"))?;

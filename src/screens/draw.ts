@@ -18,6 +18,7 @@ export function renderDraw(root: HTMLElement, app: App) {
   const againBtn = el.querySelector<HTMLButtonElement>('#again')!;
 
   async function doDraw() {
+    drawBtn.disabled = true; againBtn.disabled = true;
     card.classList.add('spin');
     try {
       const pic = await api.drawRandom();
@@ -27,8 +28,18 @@ export function renderDraw(root: HTMLElement, app: App) {
         card.innerHTML = `<img src="${fileUrl(pic.path)}" style="width:100%;height:100%;object-fit:cover;border-radius:16px" class="pop"/>`;
         app.round.picture = pic;
         drawBtn.classList.add('hidden'); useBtn.classList.remove('hidden'); againBtn.classList.remove('hidden');
+        drawBtn.disabled = false; againBtn.disabled = false;
       }, 700);
-    } catch (e) { card.classList.remove('spin'); app.showError(String(e)); }
+    } catch (e) {
+      card.classList.remove('spin');
+      drawBtn.disabled = false; againBtn.disabled = false;
+      if (String(e).toLowerCase().includes('empty')) {
+        card.style.fontSize = '22px';
+        card.innerHTML = `<div style="text-align:center;padding:20px;color:var(--lav)" class="display">🖼️ No pictures yet!<br><span style="font-size:16px">Ask a grown-up: ⚙️ Settings → Gallery folder</span></div>`;
+      } else {
+        app.showError(String(e));
+      }
+    }
   }
   drawBtn.onclick = doDraw;
   againBtn.onclick = doDraw;

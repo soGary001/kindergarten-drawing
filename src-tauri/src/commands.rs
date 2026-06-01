@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use crate::{asr, gallery, image_gen, secret, settings::{self, AppSettings}};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
@@ -80,29 +81,27 @@ pub fn save_snapshot(app: AppHandle, png_base64: String) -> Result<String, Strin
     let dir = s.snapshot_dir.map(std::path::PathBuf::from).unwrap_or_else(|| app_data(&app).join("snapshots"));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let raw = png_base64.split(',').last().unwrap_or(&png_base64);
-    let bytes = base64_decode(raw)?;
+    let bytes = STANDARD.decode(raw).map_err(|e| format!("bad base64: {e}"))?;
     let path = dir.join(format!("snapshot_{}.png", uuid::Uuid::new_v4()));
     let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
     f.write_all(&bytes).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
 }
 
-fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
-    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut rev = [255u8; 256];
-    for (i, &c) in T.iter().enumerate() { rev[c as usize] = i as u8; }
-    let clean: Vec<u8> = s.bytes().filter(|&b| b != b'=' && !b.is_ascii_whitespace()).collect();
-    let mut out = vec![];
-    for chunk in clean.chunks(4) {
-        let mut buf = 0u32; let mut bits = 0;
-        for &c in chunk { let v = rev[c as usize]; if v == 255 { return Err("bad base64".into()); } buf = (buf << 6) | v as u32; bits += 6; }
-        bits -= bits % 8;
-        for i in (0..bits).step_by(8).rev() { out.push((buf >> i) as u8); }
-    }
-    Ok(out)
-}
-
 #[tauri::command]
 pub async fn check_connectivity() -> bool {
     reqwest::Client::new().get("https://dashscope.aliyuncs.com").timeout(std::time::Duration::from_secs(5)).send().await.is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base64_roundtrip_unaligned() {
+        for s in ["a", "ab", "abc", "abcd", "hello world"] {
+            let enc = STANDARD.encode(s.as_bytes());
+            assert_eq!(STANDARD.decode(&enc).unwrap(), s.as_bytes());
+        }
+    }
 }

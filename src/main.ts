@@ -1,5 +1,6 @@
 import { App, type Screen } from './state';
 import { api } from './api';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { renderIdle } from './screens/idle';
 import { renderDraw } from './screens/draw';
 import { renderDescribe } from './screens/describe';
@@ -32,8 +33,8 @@ async function boot() {
 
   mountSettings(app);
   const s = await api.getSettings();
-  if (s.fullscreen) { /* applied via tauri window in settings.ts */ }
-  if (!(await api.checkConnectivity())) showError("No internet — speech & image need a connection 🌐", ()=>app.go('idle'));
+  if (s.fullscreen) { await getCurrentWindow().setFullscreen(true); }
   app.go('idle');
+  api.checkConnectivity().then(ok => { if (!ok) showError("No internet — speech & image need a connection 🌐", () => app.go('idle')); });
 }
 boot();

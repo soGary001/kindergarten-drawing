@@ -21,10 +21,19 @@ export function renderDescribe(root: HTMLElement, app: App) {
   let recording = false;
   let finalText = '';
   const unlisten: Array<Promise<any>> = [];
+  let cleaned = false;
+
+  async function cleanup() {
+    if (cleaned) return;
+    cleaned = true;
+    await streamer?.stop();
+    try { await api.asrStop(); } catch (_) {}
+    unlisten.forEach(u => u.then(f => f()));
+  }
 
   unlisten.push(onEvent<string>('asr://partial', (s) => { tEl.textContent = finalText + ' ' + s; }));
   unlisten.push(onEvent<string>('asr://final', (s) => { finalText = (finalText + ' ' + s).trim(); tEl.textContent = finalText; app.round.transcript = finalText; }));
-  unlisten.push(onEvent<string>('asr://error', (e) => app.showError(e)));
+  unlisten.push(onEvent<string>('asr://error', async (e) => { await cleanup(); app.showError(e); }));
 
   mic.onclick = async () => {
     if (!recording) {
@@ -41,5 +50,5 @@ export function renderDescribe(root: HTMLElement, app: App) {
       gen.classList.remove('hidden');
     }
   };
-  gen.onclick = () => { unlisten.forEach(u=>u.then(f=>f())); app.go('generating'); };
+  gen.onclick = async () => { await cleanup(); app.go('generating'); };
 }
