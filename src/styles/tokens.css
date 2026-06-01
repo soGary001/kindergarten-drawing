@@ -1,0 +1,14 @@
+@font-face { font-family:'Baloo 2'; src:url('/fonts/Baloo2-Bold.woff2') format('woff2'); font-weight:700; }
+@font-face { font-family:'Baloo 2'; src:url('/fonts/Baloo2-ExtraBold.woff2') format('woff2'); font-weight:800; }
+@font-face { font-family:'Fredoka'; src:url('/fonts/Fredoka-Medium.woff2') format('woff2'); font-weight:500; }
+@font-face { font-family:'Fredoka'; src:url('/fonts/Fredoka-SemiBold.woff2') format('woff2'); font-weight:600; }
+
+:root{
+  --bg:#fdeef2; --pink:#ff7eb6; --mint:#a0e7e5; --yellow:#ffd23f; --lav:#c3b6f7; --ink:#2b2b3a;
+  --shadow-pink:#ffd1e3; --shadow-mint:#b8ecd8; --shadow-yellow:#e0a800; --shadow-lav:#e7d6ff;
+  --radius:24px; --font-display:'Baloo 2',system-ui,sans-serif; --font-body:'Fredoka',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#app{height:100%}
+body{font-family:var(--font-body);background:var(--bg);color:var(--ink);overflow:hidden}
+h1,h2,.display{font-family:var(--font-display);font-weight:800}

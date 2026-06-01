@@ -1,22 +1,39 @@
-import { invoke } from "@tauri-apps/api/core";
+import { App, type Screen } from './state';
+import { api } from './api';
+import { renderIdle } from './screens/idle';
+import { renderDraw } from './screens/draw';
+import { renderDescribe } from './screens/describe';
+import { renderGenerating } from './screens/generating';
+import { renderCompare } from './screens/compare';
+import { mountSettings } from './screens/settings';
+import { showError } from './screens/errorOverlay';
 
-let greetInputEl: HTMLInputElement | null;
-let greetMsgEl: HTMLElement | null;
-
-async function greet() {
-  if (greetMsgEl && greetInputEl) {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsgEl.textContent = await invoke("greet", {
-      name: greetInputEl.value,
-    });
-  }
+function scatterShapes() {
+  const host = document.getElementById('shapes')!;
+  const svgs = [
+    `<svg width="80" height="80"><circle cx="40" cy="40" r="26" fill="#a0e7e5"/></svg>`,
+    `<svg width="80" height="80"><polygon points="40,6 72,68 8,68" fill="#c3b6f7"/></svg>`,
+    `<svg width="90" height="40"><path d="M5 30 Q20 5 35 30 T70 30" stroke="#ffd23f" stroke-width="8" fill="none"/></svg>`,
+    `<svg width="60" height="60"><rect x="10" y="10" width="40" height="40" rx="8" fill="#ff7eb6" transform="rotate(18 30 30)"/></svg>`,
+  ];
+  const spots = [[5,8],[88,12],[3,70],[90,75],[48,4],[70,88]];
+  spots.forEach(([x,y],i)=>{ const d=document.createElement('div'); d.className='shape floaty';
+    d.style.left=x+'vw'; d.style.top=y+'vh'; d.style.animationDelay=(i*0.4)+'s';
+    d.innerHTML=svgs[i%svgs.length]; host.appendChild(d); });
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  greetInputEl = document.querySelector("#greet-input");
-  greetMsgEl = document.querySelector("#greet-msg");
-  document.querySelector("#greet-form")?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    greet();
-  });
-});
+async function boot() {
+  scatterShapes();
+  const root = document.getElementById('app')!;
+  const app = new App(root, {
+    idle: renderIdle, draw: renderDraw, describe: renderDescribe,
+    generating: renderGenerating, compare: renderCompare,
+  } as Record<Screen, any>, (m)=>showError(m, ()=>app.go('idle')));
+
+  mountSettings(app);
+  const s = await api.getSettings();
+  if (s.fullscreen) { /* applied via tauri window in settings.ts */ }
+  if (!(await api.checkConnectivity())) showError("No internet — speech & image need a connection 🌐", ()=>app.go('idle'));
+  app.go('idle');
+}
+boot();
