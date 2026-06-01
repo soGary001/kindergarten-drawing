@@ -2,6 +2,8 @@ mod xor;
 mod secret;
 mod settings;
 mod gallery;
+mod prompt;
+mod image_gen;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
