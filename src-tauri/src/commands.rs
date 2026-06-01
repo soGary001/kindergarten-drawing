@@ -14,7 +14,9 @@ fn app_data(app: &AppHandle) -> std::path::PathBuf {
 
 fn active_gallery_dir(app: &AppHandle, s: &AppSettings) -> std::path::PathBuf {
     if let Some(d) = &s.gallery_dir { return std::path::PathBuf::from(d); }
-    app.path().resource_dir().map(|r| r.join("gallery")).unwrap_or_else(|_| std::path::PathBuf::from("public/gallery"))
+    let dir = app_data(app).join("gallery");
+    let _ = std::fs::create_dir_all(&dir); // ensure it exists for the operator to fill
+    dir
 }
 
 #[tauri::command]
