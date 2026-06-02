@@ -4,9 +4,9 @@ export function renderIdle(root: HTMLElement, app: App) {
   el.className = 'screen';
   el.innerHTML = `
     <div class="display pop" style="font-size:88px">🎨🗣️✨</div>
-    <h1 class="pop" style="font-size:56px;color:var(--pink);text-align:center">English Speaking Stars</h1>
-    <p class="display" style="font-size:24px;color:var(--lav)">Draw a picture · Describe it · Watch the magic!</p>
-    <button class="btn pink floaty" id="start" style="margin-top:20px">Start! 🚀</button>`;
+    <h1 class="pop" style="font-size:56px;color:var(--pink);text-align:center">English Speaking Stars<span class="zh-sub">英语口语小明星</span></h1>
+    <p class="display" style="font-size:24px;color:var(--lav)">Draw a picture · Describe it · Watch the magic!<span class="zh-line">抽张图卡 · 用英语描述 · 见证魔法时刻！</span></p>
+    <button class="btn pink floaty" id="start" style="margin-top:20px"><span class="en">Start! 🚀</span><span class="zh">开始</span></button>`;
   root.appendChild(el);
   el.querySelector<HTMLButtonElement>('#start')!.onclick = () => { app.resetRound(); app.go('draw'); };
 }

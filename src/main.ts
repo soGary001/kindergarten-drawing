@@ -35,6 +35,6 @@ async function boot() {
   const s = await api.getSettings();
   if (s.fullscreen) { await getCurrentWindow().setFullscreen(true); }
   app.go('idle');
-  api.checkConnectivity().then(ok => { if (!ok) showError("No internet — speech & image need a connection 🌐", () => app.go('idle')); });
+  api.checkConnectivity().then(ok => { if (!ok) showError("No internet 无网络 — speech & image generation need internet / 语音识别和生成图片都需要联网 🌐", () => app.go('idle')); });
 }
 boot();

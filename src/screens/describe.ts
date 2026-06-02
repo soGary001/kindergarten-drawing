@@ -6,10 +6,10 @@ export function renderDescribe(root: HTMLElement, app: App) {
   const picUrl = app.round.picture ? fileUrl(app.round.picture.path) : '';
   el.innerHTML = `
     <div class="panel" style="width:58vw;aspect-ratio:16/9"><img src="${picUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:16px"/></div>
-    <div id="transcript" class="display" style="font-size:30px;min-height:44px;color:var(--ink);text-align:center;max-width:70vw">🎤 Tap the mic and tell me what you see!</div>
+    <div id="transcript" class="display" style="font-size:30px;min-height:44px;color:var(--ink);text-align:center;max-width:70vw">🎤 Tap the mic and tell me what you see!<span class="zh-line">点击麦克风，用英语说说你看到了什么！</span></div>
     <div style="display:flex;gap:18px">
-      <button class="btn pink" id="mic">🎤 Start Talking</button>
-      <button class="btn mint hidden" id="gen">Make it! ✨</button>
+      <button class="btn pink" id="mic"><span class="en">🎤 Start Talking</span><span class="zh">开始说</span></button>
+      <button class="btn mint hidden" id="gen"><span class="en">Make it! ✨</span><span class="zh">生成图片</span></button>
     </div>`;
   root.appendChild(el);
   const tEl = el.querySelector<HTMLDivElement>('#transcript')!;
@@ -37,11 +37,11 @@ export function renderDescribe(root: HTMLElement, app: App) {
       try {
         finalText = ''; app.round.transcript = '';
         await api.asrStart();
-        recording = true; mic.textContent = '⏹ Stop'; mic.classList.add('mint');
+        recording = true; mic.innerHTML = '<span class="en">⏹ Stop</span><span class="zh">停止</span>'; mic.classList.add('mint');
       } catch (e) { app.showError(String(e)); }
     } else {
       await api.asrStop();
-      recording = false; mic.textContent = '🎤 Talk again';
+      recording = false; mic.innerHTML = '<span class="en">🎤 Talk again</span><span class="zh">再说一次</span>';
       gen.classList.remove('hidden');
     }
   };

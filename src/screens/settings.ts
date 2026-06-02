@@ -13,15 +13,15 @@ export function mountSettings(_app: App) {
     const p = document.createElement('div'); p.id='settings';
     p.style.cssText='position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center';
     p.innerHTML = `<div class="panel" style="width:520px;display:flex;flex-direction:column;gap:14px">
-      <h2 style="color:var(--pink)">Operator Settings</h2>
-      <label class="display">Child / Round label</label>
+      <h2 style="color:var(--pink)">Operator Settings<span class="zh-sub">操作设置</span></h2>
+      <label class="display">Child / Round label 孩子 / 轮次 标签</label>
       <input id="label" style="font-size:20px;padding:8px;border-radius:10px;border:2px solid var(--lav)"/>
-      <button class="btn mint" id="gallery">📁 Gallery folder</button>
-      <div id="gpath" style="font-size:14px;color:#888">${s.gallery_dir ?? '(bundled default)'}</div>
-      <button class="btn mint" id="snap">📁 Snapshot folder</button>
-      <div id="spath" style="font-size:14px;color:#888">${s.snapshot_dir ?? '(default)'}</div>
-      <label class="display"><input type="checkbox" id="fs" ${s.fullscreen?'checked':''}/> Fullscreen</label>
-      <div style="display:flex;gap:10px"><button class="btn pink" id="ok">Save</button><button class="btn" id="cancel">Close</button></div>
+      <button class="btn mint" id="gallery"><span class="en">📁 Gallery folder</span><span class="zh">图片文件夹</span></button>
+      <div id="gpath" style="font-size:14px;color:#888">${s.gallery_dir ?? '(默认内置 default)'}</div>
+      <button class="btn mint" id="snap"><span class="en">📁 Snapshot folder</span><span class="zh">截图保存文件夹</span></button>
+      <div id="spath" style="font-size:14px;color:#888">${s.snapshot_dir ?? '(默认 default)'}</div>
+      <label class="display"><input type="checkbox" id="fs" ${s.fullscreen?'checked':''}/> Fullscreen 全屏</label>
+      <div style="display:flex;gap:10px"><button class="btn pink" id="ok"><span class="en">Save</span><span class="zh">保存</span></button><button class="btn" id="cancel"><span class="en">Close</span><span class="zh">关闭</span></button></div>
     </div>`;
     document.body.appendChild(p);
     p.querySelector<HTMLInputElement>('#label')!.value = s.child_label;

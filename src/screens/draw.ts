@@ -4,12 +4,12 @@ import { api, fileUrl } from '../api';
 export function renderDraw(root: HTMLElement, app: App) {
   const el = document.createElement('div'); el.className = 'screen';
   el.innerHTML = `
-    <h1 style="color:var(--pink);font-size:44px">Lucky Draw 🎴</h1>
+    <h1 style="color:var(--pink);font-size:44px">Lucky Draw 🎴<span class="zh-sub">幸运抽卡</span></h1>
     <div id="card" class="panel" style="width:62vw;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;font-size:120px">🎴</div>
     <div style="display:flex;gap:18px">
-      <button class="btn" id="draw">Draw a Card!</button>
-      <button class="btn mint hidden" id="use">Use this one ✅</button>
-      <button class="btn pink hidden" id="again">Draw again 🔄</button>
+      <button class="btn" id="draw"><span class="en">Draw a Card! 🎴</span><span class="zh">抽一张卡</span></button>
+      <button class="btn mint hidden" id="use"><span class="en">Use this one ✅</span><span class="zh">就选它</span></button>
+      <button class="btn pink hidden" id="again"><span class="en">Draw again 🔄</span><span class="zh">再抽一次</span></button>
     </div>`;
   root.appendChild(el);
   const card = el.querySelector<HTMLDivElement>('#card')!;
@@ -35,7 +35,7 @@ export function renderDraw(root: HTMLElement, app: App) {
       drawBtn.disabled = false; againBtn.disabled = false;
       if (String(e).toLowerCase().includes('empty')) {
         card.style.fontSize = '22px';
-        card.innerHTML = `<div style="text-align:center;padding:20px;color:var(--lav)" class="display">🖼️ No pictures yet!<br><span style="font-size:16px">Ask a grown-up: ⚙️ Settings → Gallery folder</span></div>`;
+        card.innerHTML = `<div style="text-align:center;padding:20px;color:var(--lav)" class="display">🖼️ No pictures yet!<span style="font-size:16px;display:block;margin-top:6px">Ask a grown-up: ⚙️ Settings → Gallery folder<br>还没有图片，请老师在 ⚙️ 设置 → 图片文件夹 中添加</span></div>`;
       } else {
         app.showError(String(e));
       }

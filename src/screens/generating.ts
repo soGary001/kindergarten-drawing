@@ -4,7 +4,7 @@ export function renderGenerating(root: HTMLElement, app: App) {
   const el = document.createElement('div'); el.className = 'screen';
   el.innerHTML = `
     <div class="display spin" style="font-size:90px">🎨</div>
-    <h1 style="color:var(--pink);font-size:44px">AI is painting…</h1>
+    <h1 style="color:var(--pink);font-size:44px">AI is painting…<span class="zh-sub">AI 正在画画…</span></h1>
     <p class="display" style="font-size:24px;color:var(--lav)">"${app.round.transcript || '...'}"</p>`;
   root.appendChild(el);
   (async () => {

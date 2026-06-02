@@ -10,3 +10,10 @@
 .shape{position:fixed;z-index:0;pointer-events:none;opacity:.9}
 .screen{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:32px}
 .hidden{display:none!important}
+
+/* --- bilingual helpers --- */
+.btn{line-height:1.05}
+.btn .en{display:block}
+.btn .zh{display:block;font-size:.46em;font-weight:600;letter-spacing:1px;opacity:.85;margin-top:3px}
+.zh-sub{display:block;font-family:var(--font-display);font-weight:700;font-size:.5em;color:var(--lav);margin-top:6px;letter-spacing:1px}
+.zh-line{display:block;font-size:.7em;opacity:.8;margin-top:4px}
