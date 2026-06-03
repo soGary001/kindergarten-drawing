@@ -28,3 +28,4 @@ dist-ssr
 # Project-specific
 .superpowers/
 src-tauri/target/
+dist-artifacts/

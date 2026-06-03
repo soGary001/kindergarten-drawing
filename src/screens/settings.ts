@@ -12,7 +12,7 @@ export function mountSettings(_app: App) {
     const s = await api.getSettings();
     const p = document.createElement('div'); p.id='settings';
     p.style.cssText='position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center';
-    p.innerHTML = `<div class="panel" style="width:520px;display:flex;flex-direction:column;gap:14px">
+    p.innerHTML = `<div class="panel" style="width:min(520px,92vw);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px">
       <h2 style="color:var(--pink)">Operator Settings<span class="zh-sub">操作设置</span></h2>
       <label class="display">Child / Round label 孩子 / 轮次 标签</label>
       <input id="label" style="font-size:20px;padding:8px;border-radius:10px;border:2px solid var(--lav)"/>

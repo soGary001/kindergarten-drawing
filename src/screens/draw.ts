@@ -4,8 +4,8 @@ import { api, fileUrl } from '../api';
 export function renderDraw(root: HTMLElement, app: App) {
   const el = document.createElement('div'); el.className = 'screen';
   el.innerHTML = `
-    <h1 style="color:var(--pink);font-size:44px">Lucky Draw 🎴<span class="zh-sub">幸运抽卡</span></h1>
-    <div id="card" class="panel" style="width:62vw;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;font-size:120px">🎴</div>
+    <h1 style="color:var(--pink);font-size:clamp(22px,5.2vmin,44px)">Lucky Draw 🎴<span class="zh-sub">幸运抽卡</span></h1>
+    <div id="card" class="panel" style="width:min(62vw, calc(54vh * 16 / 9));aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;font-size:clamp(56px,14vmin,120px)">🎴</div>
     <div style="display:flex;gap:18px">
       <button class="btn" id="draw"><span class="en">Draw a Card! 🎴</span><span class="zh">抽一张卡</span></button>
       <button class="btn mint hidden" id="use"><span class="en">Use this one ✅</span><span class="zh">就选它</span></button>
