@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "name": "kindergarten-speaking-proxy",
+  "description": "HK-region proxy for DashScope (qwen-image-2.0-pro image gen + qwen3-asr-flash speech-to-text). Keeps the API key server-side.",
+  "engines": { "node": ">=18" }
+}
