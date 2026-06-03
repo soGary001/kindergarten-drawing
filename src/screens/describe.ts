@@ -1,5 +1,5 @@
 import type { App } from '../state';
-import { api, fileUrl, onEvent } from '../api';
+import { api, fileUrl } from '../api';
 
 export function renderDescribe(root: HTMLElement, app: App) {
   const el = document.createElement('div'); el.className = 'screen';
@@ -17,33 +17,30 @@ export function renderDescribe(root: HTMLElement, app: App) {
   const gen = el.querySelector<HTMLButtonElement>('#gen')!;
 
   let recording = false;
-  let finalText = '';
-  const unlisten: Array<Promise<any>> = [];
-  let cleaned = false;
-
-  async function cleanup() {
-    if (cleaned) return;
-    cleaned = true;
-    try { await api.asrStop(); } catch (_) {}
-    unlisten.forEach(u => u.then(f => f()));
-  }
-
-  unlisten.push(onEvent<string>('asr://partial', (s) => { tEl.textContent = finalText + ' ' + s; }));
-  unlisten.push(onEvent<string>('asr://final', (s) => { finalText = (finalText + ' ' + s).trim(); tEl.textContent = finalText; app.round.transcript = finalText; }));
-  unlisten.push(onEvent<string>('asr://error', async (e) => { await cleanup(); app.showError(e); }));
 
   mic.onclick = async () => {
     if (!recording) {
       try {
-        finalText = ''; app.round.transcript = '';
+        app.round.transcript = '';
         await api.asrStart();
-        recording = true; mic.innerHTML = '<span class="en">⏹ Stop</span><span class="zh">停止</span>'; mic.classList.add('mint');
+        recording = true;
+        mic.innerHTML = '<span class="en">⏹ Stop</span><span class="zh">停止</span>';
+        tEl.innerHTML = '🔴 Recording… / <span class="zh-line">录音中…</span>';
       } catch (e) { app.showError(String(e)); }
     } else {
-      await api.asrStop();
-      recording = false; mic.innerHTML = '<span class="en">🎤 Talk again</span><span class="zh">再说一次</span>';
+      recording = false;
+      mic.disabled = true;
+      tEl.innerHTML = '⏳ Transcribing… / <span class="zh-line">识别中…</span>';
+      try {
+        const t = await api.asrStop();
+        app.round.transcript = t;
+        tEl.textContent = t || "(没听清，请再说一次 / didn't catch that)";
+      } catch (e) { app.showError(String(e)); }
+      mic.disabled = false;
+      mic.innerHTML = '<span class="en">🎤 Talk again</span><span class="zh">再说一次</span>';
       gen.classList.remove('hidden');
     }
   };
-  gen.onclick = async () => { await cleanup(); app.go('generating'); };
+
+  gen.onclick = () => { app.go('generating'); };
 }

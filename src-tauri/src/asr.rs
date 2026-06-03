@@ -1,196 +1,54 @@
-use serde::Deserialize;
+const PROXY: &str = "https://vercel-proxy-plum-eight.vercel.app/api/transcribe";
 
-pub fn run_task_msg(task_id: &str) -> String {
-    serde_json::json!({
-        "header": { "action": "run-task", "task_id": task_id, "streaming": "duplex" },
-        "payload": {
-            "task_group": "audio", "task": "asr", "function": "recognition",
-            "model": "paraformer-realtime-v2",
-            "parameters": { "format": "pcm", "sample_rate": 16000, "language_hints": ["en"] },
-            "input": {}
-        }
-    }).to_string()
-}
-
-pub fn finish_task_msg(task_id: &str) -> String {
-    serde_json::json!({
-        "header": { "action": "finish-task", "task_id": task_id, "streaming": "duplex" },
-        "payload": { "input": {} }
-    }).to_string()
-}
-
-#[derive(Debug, PartialEq)]
-pub enum AsrEvent {
-    Started,
-    Partial(String),
-    Final(String),
-    Finished,
-    Failed(String),
-    Other,
+/// Wrap raw PCM16 mono little-endian samples in a 44-byte WAV header.
+pub fn wav_from_pcm16le(pcm: &[u8], sample_rate: u32) -> Vec<u8> {
+    let data_len = pcm.len() as u32;
+    let byte_rate = sample_rate * 2; // mono * 16-bit
+    let mut w = Vec::with_capacity(44 + pcm.len());
+    w.extend_from_slice(b"RIFF");
+    w.extend_from_slice(&(36 + data_len).to_le_bytes());
+    w.extend_from_slice(b"WAVE");
+    w.extend_from_slice(b"fmt ");
+    w.extend_from_slice(&16u32.to_le_bytes());
+    w.extend_from_slice(&1u16.to_le_bytes());   // PCM
+    w.extend_from_slice(&1u16.to_le_bytes());   // mono
+    w.extend_from_slice(&sample_rate.to_le_bytes());
+    w.extend_from_slice(&byte_rate.to_le_bytes());
+    w.extend_from_slice(&2u16.to_le_bytes());   // block align
+    w.extend_from_slice(&16u16.to_le_bytes());  // bits/sample
+    w.extend_from_slice(b"data");
+    w.extend_from_slice(&data_len.to_le_bytes());
+    w.extend_from_slice(pcm);
+    w
 }
 
-#[derive(Deserialize)]
-struct Frame {
-    header: Header,
-    #[serde(default)]
-    payload: Option<Payload>,
-}
-#[derive(Deserialize)]
-struct Header {
-    event: String,
-    #[serde(default)]
-    error_message: Option<String>,
-}
-#[derive(Deserialize)]
-struct Payload {
-    #[serde(default)]
-    output: Option<Output>,
-}
-#[derive(Deserialize)]
-struct Output {
-    #[serde(default)]
-    sentence: Option<Sentence>,
-}
-#[derive(Deserialize)]
-struct Sentence {
-    #[serde(default)]
-    text: Option<String>,
-    #[serde(default)]
-    sentence_end: Option<bool>,
-}
-
-pub fn parse_event(json: &str) -> AsrEvent {
-    let f: Frame = match serde_json::from_str(json) {
-        Ok(f) => f,
-        Err(_) => return AsrEvent::Other,
-    };
-    match f.header.event.as_str() {
-        "task-started" => AsrEvent::Started,
-        "task-finished" => AsrEvent::Finished,
-        "task-failed" => {
-            AsrEvent::Failed(f.header.error_message.unwrap_or_else(|| "asr failed".into()))
-        }
-        "result-generated" => {
-            let s = f.payload.and_then(|p| p.output).and_then(|o| o.sentence);
-            match s {
-                Some(s) => {
-                    let text = s.text.unwrap_or_default();
-                    if s.sentence_end.unwrap_or(false) {
-                        AsrEvent::Final(text)
-                    } else {
-                        AsrEvent::Partial(text)
-                    }
-                }
-                None => AsrEvent::Other,
-            }
-        }
-        _ => AsrEvent::Other,
-    }
+/// Send recorded PCM (16k mono LE) to the HK proxy, return the transcript text.
+pub async fn transcribe(pcm: Vec<u8>) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    if pcm.len() < 3200 { return Err("no audio captured".into()); }
+    let wav = wav_from_pcm16le(&pcm, 16000);
+    let b64 = STANDARD.encode(&wav);
+    let client = reqwest::Client::new();
+    let resp = client.post(PROXY)
+        .json(&serde_json::json!({ "audio": b64 }))
+        .send().await.map_err(|e| format!("network error: {e}"))?;
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("bad json: {e}"))?;
+    if let Some(err) = v.get("error").and_then(|x| x.as_str()) { return Err(err.to_string()); }
+    Ok(v.get("text").and_then(|x| x.as_str()).unwrap_or("").trim().to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn parses_partial_and_final() {
-        let p = r#"{"header":{"task_id":"t","event":"result-generated"},"payload":{"output":{"sentence":{"text":"a pink","sentence_end":false}}}}"#;
-        assert_eq!(parse_event(p), AsrEvent::Partial("a pink".into()));
-        let f = r#"{"header":{"task_id":"t","event":"result-generated"},"payload":{"output":{"sentence":{"text":"a pink pig","sentence_end":true}}}}"#;
-        assert_eq!(parse_event(f), AsrEvent::Final("a pink pig".into()));
+    fn wav_header_is_44_bytes_and_sized() {
+        let pcm = vec![0u8; 320];
+        let w = wav_from_pcm16le(&pcm, 16000);
+        assert_eq!(&w[0..4], b"RIFF");
+        assert_eq!(&w[8..12], b"WAVE");
+        assert_eq!(w.len(), 44 + 320);
+        // data chunk size little-endian == 320
+        assert_eq!(u32::from_le_bytes([w[40],w[41],w[42],w[43]]), 320);
     }
-    #[test]
-    fn parses_lifecycle_and_error() {
-        assert_eq!(
-            parse_event(r#"{"header":{"task_id":"t","event":"task-started"},"payload":{}}"#),
-            AsrEvent::Started
-        );
-        assert_eq!(
-            parse_event(r#"{"header":{"task_id":"t","event":"task-finished"},"payload":{}}"#),
-            AsrEvent::Finished
-        );
-        assert_eq!(
-            parse_event(
-                r#"{"header":{"task_id":"t","event":"task-failed","error_message":"nope"}}"#
-            ),
-            AsrEvent::Failed("nope".into())
-        );
-    }
-    #[test]
-    fn run_task_has_model_and_lang() {
-        let m = run_task_msg("abc");
-        assert!(m.contains("paraformer-realtime-v2"));
-        assert!(m.contains("\"en\""));
-        assert!(m.contains("\"action\":\"run-task\""));
-    }
-}
-
-// Part 2 — WebSocket session
-
-use futures_util::{SinkExt, StreamExt};
-use tauri::{AppHandle, Emitter};
-use tokio::sync::mpsc;
-use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
-
-const WS_URL: &str = "wss://dashscope.aliyuncs.com/api-ws/v1/inference";
-
-pub struct AsrSession {
-    pub audio_tx: mpsc::UnboundedSender<Vec<u8>>,
-    pub stop_tx: mpsc::UnboundedSender<()>,
-    pub mic: Option<crate::mic::MicHandle>,
-}
-
-/// Open the WS, start a task, stream audio from `audio_rx`, emit events to the frontend.
-pub async fn run_session(app: AppHandle, api_key: String) -> Result<AsrSession, String> {
-    let (audio_tx, mut audio_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-    let (stop_tx, mut stop_rx) = mpsc::unbounded_channel::<()>();
-
-    let mut req = WS_URL.into_client_request().map_err(|e| e.to_string())?;
-    req.headers_mut()
-        .insert("Authorization", format!("Bearer {api_key}").parse().unwrap());
-    req.headers_mut()
-        .insert("X-DashScope-DataInspection", "enable".parse().unwrap());
-
-    let (ws, _) = tokio_tungstenite::connect_async(req)
-        .await
-        .map_err(|e| format!("ws connect: {e}"))?;
-    let (mut write, mut read) = ws.split();
-
-    let task_id = uuid::Uuid::new_v4().simple().to_string();
-    write
-        .send(Message::Text(run_task_msg(&task_id)))
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let app2 = app.clone();
-    let finish_id = task_id.clone();
-    tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                Some(chunk) = audio_rx.recv() => {
-                    if write.send(Message::Binary(chunk)).await.is_err() { break; }
-                }
-                Some(_) = stop_rx.recv() => {
-                    let _ = write.send(Message::Text(finish_task_msg(&finish_id))).await;
-                }
-                Some(msg) = read.next() => {
-                    match msg {
-                        Ok(Message::Text(t)) => {
-                            match parse_event(&t) {
-                                AsrEvent::Partial(s) => { let _ = app2.emit("asr://partial", s); }
-                                AsrEvent::Final(s) => { let _ = app2.emit("asr://final", s); }
-                                AsrEvent::Finished => { let _ = app2.emit("asr://finished", ()); break; }
-                                AsrEvent::Failed(e) => { let _ = app2.emit("asr://error", e); break; }
-                                _ => {}
-                            }
-                        }
-                        Ok(Message::Close(_)) | Err(_) => break,
-                        _ => {}
-                    }
-                }
-                else => break,
-            }
-        }
-    });
-
-    Ok(AsrSession { audio_tx, stop_tx, mic: None })
 }

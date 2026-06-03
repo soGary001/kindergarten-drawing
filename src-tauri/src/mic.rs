@@ -1,8 +1,7 @@
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex,
 };
-use tokio::sync::mpsc::UnboundedSender;
 
 pub struct MicHandle {
     stop: Arc<AtomicBool>,
@@ -15,8 +14,8 @@ impl MicHandle {
 }
 
 /// Start capturing the default input device on a dedicated thread.
-/// Converts to 16 kHz mono i16 LE and pushes ~3200-byte chunks (~100 ms @ 16 kHz) to `tx`.
-pub fn start_capture(tx: UnboundedSender<Vec<u8>>) -> Result<MicHandle, String> {
+/// Converts to 16 kHz mono i16 LE and appends bytes to `buf` (shared Arc<Mutex<Vec<u8>>>).
+pub fn start_capture(buf: Arc<Mutex<Vec<u8>>>) -> Result<MicHandle, String> {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -43,33 +42,30 @@ pub fn start_capture(tx: UnboundedSender<Vec<u8>>) -> Result<MicHandle, String> 
         // Streaming resampler: `acc` is a bounded accumulator that PERSISTS across
         // callbacks. For each input frame we add 1.0; whenever it reaches `step` we
         // emit one output sample and subtract `step`. This keeps `acc` in [0, step)
-        // forever, so it works correctly across callback boundaries (the previous
-        // version compared a global position against a per-buffer index, which made
-        // every callback after the first emit ~nothing -> NO_VALID_AUDIO_ERROR).
+        // forever, so it works correctly across callback boundaries.
+        // We build a per-callback local Vec<u8>, then lock buf once per callback to append.
         let stream = match sample_format {
             cpal::SampleFormat::F32 => {
-                let tx2 = tx.clone();
+                let buf2 = buf.clone();
                 let mut acc = 0.0_f32;
-                let mut buf: Vec<u8> = Vec::with_capacity(3200);
                 device.build_input_stream(
                     &config.into(),
                     move |data: &[f32], _: &cpal::InputCallbackInfo| {
                         let frames = data.len() / channels.max(1);
+                        let mut local: Vec<u8> = Vec::new();
                         for frame_idx in 0..frames {
                             acc += 1.0;
                             if acc >= step {
                                 acc -= step;
-                                // Mono: take channel 0 of the frame.
                                 let s = data[frame_idx * channels];
                                 let sample = (s.clamp(-1.0, 1.0) * 32_767.0) as i16;
                                 let le = sample.to_le_bytes();
-                                buf.push(le[0]);
-                                buf.push(le[1]);
-                                if buf.len() >= 3200 {
-                                    let _ = tx2
-                                        .send(std::mem::replace(&mut buf, Vec::with_capacity(3200)));
-                                }
+                                local.push(le[0]);
+                                local.push(le[1]);
                             }
+                        }
+                        if !local.is_empty() {
+                            buf2.lock().unwrap().extend_from_slice(&local);
                         }
                     },
                     err_fn,
@@ -77,27 +73,25 @@ pub fn start_capture(tx: UnboundedSender<Vec<u8>>) -> Result<MicHandle, String> 
                 )
             }
             cpal::SampleFormat::I16 => {
-                let tx2 = tx.clone();
+                let buf2 = buf.clone();
                 let mut acc = 0.0_f32;
-                let mut buf: Vec<u8> = Vec::with_capacity(3200);
                 device.build_input_stream(
                     &config.into(),
                     move |data: &[i16], _: &cpal::InputCallbackInfo| {
                         let frames = data.len() / channels.max(1);
+                        let mut local: Vec<u8> = Vec::new();
                         for frame_idx in 0..frames {
                             acc += 1.0;
                             if acc >= step {
                                 acc -= step;
-                                // Already i16 mono sample; pass through.
                                 let sample = data[frame_idx * channels];
                                 let le = sample.to_le_bytes();
-                                buf.push(le[0]);
-                                buf.push(le[1]);
-                                if buf.len() >= 3200 {
-                                    let _ = tx2
-                                        .send(std::mem::replace(&mut buf, Vec::with_capacity(3200)));
-                                }
+                                local.push(le[0]);
+                                local.push(le[1]);
                             }
+                        }
+                        if !local.is_empty() {
+                            buf2.lock().unwrap().extend_from_slice(&local);
                         }
                     },
                     err_fn,
@@ -105,27 +99,25 @@ pub fn start_capture(tx: UnboundedSender<Vec<u8>>) -> Result<MicHandle, String> 
                 )
             }
             cpal::SampleFormat::U16 => {
-                let tx2 = tx.clone();
+                let buf2 = buf.clone();
                 let mut acc = 0.0_f32;
-                let mut buf: Vec<u8> = Vec::with_capacity(3200);
                 device.build_input_stream(
                     &config.into(),
                     move |data: &[u16], _: &cpal::InputCallbackInfo| {
                         let frames = data.len() / channels.max(1);
+                        let mut local: Vec<u8> = Vec::new();
                         for frame_idx in 0..frames {
                             acc += 1.0;
                             if acc >= step {
                                 acc -= step;
-                                // u16 -> centered i16.
                                 let sample = (data[frame_idx * channels] as i32 - 32_768) as i16;
                                 let le = sample.to_le_bytes();
-                                buf.push(le[0]);
-                                buf.push(le[1]);
-                                if buf.len() >= 3200 {
-                                    let _ = tx2
-                                        .send(std::mem::replace(&mut buf, Vec::with_capacity(3200)));
-                                }
+                                local.push(le[0]);
+                                local.push(le[1]);
                             }
+                        }
+                        if !local.is_empty() {
+                            buf2.lock().unwrap().extend_from_slice(&local);
                         }
                     },
                     err_fn,

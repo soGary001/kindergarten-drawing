@@ -1,12 +1,13 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use crate::{asr, gallery, image_gen, secret, settings::{self, AppSettings}};
+use crate::{gallery, image_gen, settings::{self, AppSettings}};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
 #[derive(Default)]
 pub struct AppState {
     pub recent: Mutex<Vec<usize>>,
-    pub asr: Mutex<Option<asr::AsrSession>>,
+    pub mic: Mutex<Option<crate::mic::MicHandle>>,
+    pub audio: std::sync::Arc<Mutex<Vec<u8>>>,
 }
 
 fn app_data(app: &AppHandle) -> std::path::PathBuf {
@@ -60,22 +61,19 @@ pub async fn generate_image(app: AppHandle, transcript: String) -> Result<String
 }
 
 #[tauri::command]
-pub async fn asr_start(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let key = secret::api_key();
-    let mut session = asr::run_session(app.clone(), key).await?;
-    let mic_handle = crate::mic::start_capture(session.audio_tx.clone())?;
-    session.mic = Some(mic_handle);
-    *state.asr.lock().unwrap() = Some(session);
+pub fn asr_start(state: State<AppState>) -> Result<(), String> {
+    state.audio.lock().unwrap().clear();
+    let h = crate::mic::start_capture(state.audio.clone())?;
+    *state.mic.lock().unwrap() = Some(h);
     Ok(())
 }
 
 #[tauri::command]
-pub fn asr_stop(state: State<AppState>) -> Result<(), String> {
-    if let Some(s) = state.asr.lock().unwrap().as_ref() {
-        if let Some(m) = &s.mic { m.stop(); }
-        let _ = s.stop_tx.send(());
-    }
-    Ok(())
+pub async fn asr_stop(state: State<'_, AppState>) -> Result<String, String> {
+    if let Some(h) = state.mic.lock().unwrap().take() { h.stop(); }
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await; // flush last callback
+    let pcm = std::mem::take(&mut *state.audio.lock().unwrap());
+    crate::asr::transcribe(pcm).await
 }
 
 #[tauri::command]
@@ -94,7 +92,10 @@ pub fn save_snapshot(app: AppHandle, png_base64: String) -> Result<String, Strin
 
 #[tauri::command]
 pub async fn check_connectivity() -> bool {
-    reqwest::Client::new().get("https://dashscope.aliyuncs.com").timeout(std::time::Duration::from_secs(5)).send().await.is_ok()
+    reqwest::Client::new()
+        .get("https://vercel-proxy-plum-eight.vercel.app")
+        .timeout(std::time::Duration::from_secs(5))
+        .send().await.is_ok()
 }
 
 #[cfg(test)]

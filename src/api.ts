@@ -11,7 +11,7 @@ export const api = {
   drawRandom: () => invoke<ImageMeta>('draw_random'),
   generateImage: (transcript: string) => invoke<string>('generate_image', { transcript }),
   asrStart: () => invoke<void>('asr_start'),
-  asrStop: () => invoke<void>('asr_stop'),
+  asrStop: () => invoke<string>('asr_stop'),
   saveSnapshot: (pngBase64: string) => invoke<string>('save_snapshot', { pngBase64 }),
   checkConnectivity: () => invoke<boolean>('check_connectivity'),
 };
