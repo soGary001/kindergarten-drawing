@@ -9,12 +9,16 @@ export function renderDescribe(root: HTMLElement, app: App) {
     <div id="status" class="display" style="font-size:clamp(13px,2.2vmin,20px);color:var(--lav);min-height:22px;text-align:center">🎤 Starting… 正在开启麦克风…</div>
     <div id="words" style="font-family:var(--font-display);font-weight:700;font-size:clamp(16px,3vmin,30px);color:var(--ink);max-width:82vw;max-height:24vh;overflow-y:auto;min-height:1.4em;text-align:center;line-height:1.35"></div>
     <div id="timer" class="display" style="font-size:clamp(28px,6vmin,56px);color:var(--mint);min-height:1.1em"></div>
-    <button class="btn pink hidden" id="gen"><span class="en">✨ Generate</span><span class="zh">生成图片</span></button>`;
+    <div style="display:flex;gap:16px">
+      <button class="btn hidden" id="again"><span class="en">🔄 Say again</span><span class="zh">重讲</span></button>
+      <button class="btn pink hidden" id="gen"><span class="en">✨ Generate</span><span class="zh">生成图片</span></button>
+    </div>`;
   root.appendChild(el);
   const statusEl = el.querySelector<HTMLDivElement>('#status')!;
   const wordsEl = el.querySelector<HTMLDivElement>('#words')!;
   const timerEl = el.querySelector<HTMLDivElement>('#timer')!;
   const gen = el.querySelector<HTMLButtonElement>('#gen')!;
+  const again = el.querySelector<HTMLButtonElement>('#again')!;
 
   const DURATION = 60;
   let remaining = DURATION;
@@ -61,8 +65,11 @@ export function renderDescribe(root: HTMLElement, app: App) {
       app.showError(String(e));
       return;
     }
-    statusEl.innerHTML = '🔴 Recording — keep describing! <span class="zh-line">录音中…可以一直说,说完点「生成图片」</span>';
+    statusEl.innerHTML = '🔴 Recording — keep describing! <span class="zh-line">录音中…可以一直说,讲错就点「重讲」,说完点「生成图片」</span>';
     gen.classList.remove('hidden');
+    again.classList.remove('hidden');
+    gen.disabled = false;
+    again.disabled = false;
     remaining = DURATION;
     renderTimer();
     ticker = window.setInterval(() => {
@@ -72,21 +79,30 @@ export function renderDescribe(root: HTMLElement, app: App) {
     }, 1000);
   }
 
+  // "Say again": clear what's been recognized so far and re-describe.
+  // The recording session and the countdown KEEP RUNNING (timer not reset).
+  again.onclick = () => {
+    finals = [];
+    partial = '';
+    render();
+    statusEl.innerHTML = '🔄 Go ahead — say it again! <span class="zh-line">重新讲一遍吧(时间继续)</span>';
+  };
+
   async function finalize() {
     if (done) return;
     done = true;
     if (ticker !== undefined) { clearInterval(ticker); ticker = undefined; }
     gen.disabled = true;
+    again.classList.add('hidden');
     statusEl.innerHTML = '⏳ Finishing… <span class="zh-line">整理中…</span>';
     try { await api.asrStop(); } catch { /* ignore */ }
     await new Promise((r) => setTimeout(r, 1200)); // catch trailing final sentence(s)
     const text = finals.join(' ').trim();
     app.round.transcript = text;
     if (!text) {
-      // Heard nothing — let the child try again (keep listeners + same session loop).
+      // Heard nothing — let the child try again (fresh session + countdown).
       statusEl.textContent = "(没听清，再说一次吧 / let's try again)";
       done = false;
-      gen.disabled = false;
       finals = [];
       partial = '';
       render();
