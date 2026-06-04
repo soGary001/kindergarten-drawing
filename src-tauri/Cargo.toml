@@ -29,3 +29,9 @@ base64 = "0.22"
 tauri-plugin-dialog = "2"
 cpal = "0.15"
 
+# macOS-only: request microphone permission via AVFoundation before capturing.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+block2 = "0.6"
+

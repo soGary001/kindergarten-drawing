@@ -1797,7 +1797,10 @@ name = "kindergarten-speaking"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "block2",
  "cpal",
+ "objc2",
+ "objc2-foundation",
  "rand 0.8.6",
  "reqwest 0.12.28",
  "serde",

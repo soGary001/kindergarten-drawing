@@ -62,6 +62,7 @@ pub async fn generate_image(app: AppHandle, transcript: String) -> Result<String
 
 #[tauri::command]
 pub fn asr_start(state: State<AppState>) -> Result<(), String> {
+    crate::permission::ensure_mic()?; // block until mic permission granted (macOS)
     state.audio.lock().unwrap().clear();
     let h = crate::mic::start_capture(state.audio.clone())?;
     *state.mic.lock().unwrap() = Some(h);

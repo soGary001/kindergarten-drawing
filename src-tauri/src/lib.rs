@@ -1,3 +1,4 @@
+mod permission;
 mod settings;
 mod gallery;
 mod prompt;
