@@ -1,3 +1,5 @@
+mod xor;
+mod secret;
 mod permission;
 mod settings;
 mod gallery;
