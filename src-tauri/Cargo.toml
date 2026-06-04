@@ -28,6 +28,8 @@ uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 tauri-plugin-dialog = "2"
 cpal = "0.15"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
 
 # macOS-only: request microphone permission via AVFoundation before capturing.
 [target.'cfg(target_os = "macos")'.dependencies]

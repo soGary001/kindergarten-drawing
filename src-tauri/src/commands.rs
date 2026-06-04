@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager, State};
 pub struct AppState {
     pub recent: Mutex<Vec<usize>>,
     pub mic: Mutex<Option<crate::mic::MicHandle>>,
-    pub audio: std::sync::Arc<Mutex<Vec<u8>>>,
+    pub asr: Mutex<Option<crate::asr::AsrSession>>,
 }
 
 fn app_data(app: &AppHandle) -> std::path::PathBuf {
@@ -61,20 +61,24 @@ pub async fn generate_image(app: AppHandle, transcript: String) -> Result<String
 }
 
 #[tauri::command]
-pub fn asr_start(state: State<AppState>) -> Result<(), String> {
-    crate::permission::ensure_mic()?; // block until mic permission granted (macOS)
-    state.audio.lock().unwrap().clear();
-    let h = crate::mic::start_capture(state.audio.clone())?;
-    *state.mic.lock().unwrap() = Some(h);
+pub async fn asr_start(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    // Block (off the async executor) until mic permission is granted on macOS.
+    tokio::task::spawn_blocking(crate::permission::ensure_mic)
+        .await
+        .map_err(|e| e.to_string())??;
+    let key = crate::secret::api_key();
+    let session = crate::asr::run_session(app.clone(), key).await?;
+    let mic = crate::mic::start_capture(session.audio_tx.clone())?;
+    *state.mic.lock().unwrap() = Some(mic);
+    *state.asr.lock().unwrap() = Some(session);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn asr_stop(state: State<'_, AppState>) -> Result<String, String> {
-    if let Some(h) = state.mic.lock().unwrap().take() { h.stop(); }
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await; // flush last callback
-    let pcm = std::mem::take(&mut *state.audio.lock().unwrap());
-    crate::asr::transcribe(pcm).await
+pub fn asr_stop(state: State<AppState>) -> Result<(), String> {
+    if let Some(m) = state.mic.lock().unwrap().take() { m.stop(); }
+    if let Some(s) = state.asr.lock().unwrap().take() { let _ = s.stop_tx.send(()); }
+    Ok(())
 }
 
 #[tauri::command]

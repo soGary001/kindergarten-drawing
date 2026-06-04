@@ -1,7 +1,8 @@
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Arc,
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 pub struct MicHandle {
     stop: Arc<AtomicBool>,
@@ -14,14 +15,13 @@ impl MicHandle {
 }
 
 /// Start capturing the default input device on a dedicated thread.
-/// Converts to 16 kHz mono i16 LE and appends bytes to `buf` (shared Arc<Mutex<Vec<u8>>>).
-pub fn start_capture(buf: Arc<Mutex<Vec<u8>>>) -> Result<MicHandle, String> {
+/// Converts to 16 kHz mono i16 LE and streams byte chunks to `tx` (for live WebSocket ASR).
+pub fn start_capture(tx: UnboundedSender<Vec<u8>>) -> Result<MicHandle, String> {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
     let stop = Arc::new(AtomicBool::new(false));
     let stop_thread = stop.clone();
 
-    // Probe the device/config on this thread so errors surface synchronously.
     let host = cpal::default_host();
     let device = host.default_input_device().ok_or("no default input device")?;
     let config = device
@@ -34,19 +34,14 @@ pub fn start_capture(buf: Arc<Mutex<Vec<u8>>>) -> Result<MicHandle, String> {
 
     std::thread::spawn(move || {
         // Decimation ratio: how many input frames per output (16 kHz) sample.
-        // e.g. 48000 -> step 3.0, 44100 -> step ~2.756.
         let step = (in_rate / 16_000.0_f32).max(1.0);
-
         let err_fn = |e: cpal::StreamError| eprintln!("cpal stream error: {e}");
 
-        // Streaming resampler: `acc` is a bounded accumulator that PERSISTS across
-        // callbacks. For each input frame we add 1.0; whenever it reaches `step` we
-        // emit one output sample and subtract `step`. This keeps `acc` in [0, step)
-        // forever, so it works correctly across callback boundaries.
-        // We build a per-callback local Vec<u8>, then lock buf once per callback to append.
+        // `acc` is a bounded accumulator that PERSISTS across callbacks (correct resampling).
+        // Each callback builds a local Vec<u8> and sends it once to the channel.
         let stream = match sample_format {
             cpal::SampleFormat::F32 => {
-                let buf2 = buf.clone();
+                let tx2 = tx.clone();
                 let mut acc = 0.0_f32;
                 device.build_input_stream(
                     &config.into(),
@@ -65,7 +60,7 @@ pub fn start_capture(buf: Arc<Mutex<Vec<u8>>>) -> Result<MicHandle, String> {
                             }
                         }
                         if !local.is_empty() {
-                            buf2.lock().unwrap().extend_from_slice(&local);
+                            let _ = tx2.send(local);
                         }
                     },
                     err_fn,
@@ -73,7 +68,7 @@ pub fn start_capture(buf: Arc<Mutex<Vec<u8>>>) -> Result<MicHandle, String> {
                 )
             }
             cpal::SampleFormat::I16 => {
-                let buf2 = buf.clone();
+                let tx2 = tx.clone();
                 let mut acc = 0.0_f32;
                 device.build_input_stream(
                     &config.into(),
@@ -84,14 +79,13 @@ pub fn start_capture(buf: Arc<Mutex<Vec<u8>>>) -> Result<MicHandle, String> {
                             acc += 1.0;
                             if acc >= step {
                                 acc -= step;
-                                let sample = data[frame_idx * channels];
-                                let le = sample.to_le_bytes();
+                                let le = data[frame_idx * channels].to_le_bytes();
                                 local.push(le[0]);
                                 local.push(le[1]);
                             }
                         }
                         if !local.is_empty() {
-                            buf2.lock().unwrap().extend_from_slice(&local);
+                            let _ = tx2.send(local);
                         }
                     },
                     err_fn,
@@ -99,7 +93,7 @@ pub fn start_capture(buf: Arc<Mutex<Vec<u8>>>) -> Result<MicHandle, String> {
                 )
             }
             cpal::SampleFormat::U16 => {
-                let buf2 = buf.clone();
+                let tx2 = tx.clone();
                 let mut acc = 0.0_f32;
                 device.build_input_stream(
                     &config.into(),
@@ -117,7 +111,7 @@ pub fn start_capture(buf: Arc<Mutex<Vec<u8>>>) -> Result<MicHandle, String> {
                             }
                         }
                         if !local.is_empty() {
-                            buf2.lock().unwrap().extend_from_slice(&local);
+                            let _ = tx2.send(local);
                         }
                     },
                     err_fn,
@@ -137,17 +131,13 @@ pub fn start_capture(buf: Arc<Mutex<Vec<u8>>>) -> Result<MicHandle, String> {
                 return;
             }
         };
-
         if let Err(e) = stream.play() {
             eprintln!("mic: stream.play() failed: {e}");
             return;
         }
-
-        // Keep the stream alive until the stop flag is set.
         while !stop_thread.load(Ordering::SeqCst) {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-
         drop(stream);
     });
 
