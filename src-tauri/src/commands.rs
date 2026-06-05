@@ -55,9 +55,15 @@ pub fn draw_random(app: AppHandle, state: State<AppState>) -> Result<gallery::Im
 }
 
 #[tauri::command]
-pub async fn generate_image(app: AppHandle, transcript: String) -> Result<String, String> {
+pub async fn generate_image(app: AppHandle, transcript: String) -> Result<image_gen::GenResult, String> {
     let cache = app_data(&app).join("cache");
     image_gen::generate(&transcript, &cache).await
+}
+
+#[tauri::command]
+pub async fn edit_image(app: AppHandle, prev_url: String, instruction: String) -> Result<image_gen::GenResult, String> {
+    let cache = app_data(&app).join("cache");
+    image_gen::edit(&prev_url, &instruction, &cache).await
 }
 
 #[tauri::command]

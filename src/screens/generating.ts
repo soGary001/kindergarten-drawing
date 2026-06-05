@@ -9,8 +9,8 @@ export function renderGenerating(root: HTMLElement, app: App) {
   root.appendChild(el);
   (async () => {
     try {
-      const path = await api.generateImage(app.round.transcript);
-      app.round.generatedPath = path;
+      const res = await api.generateImage(app.round.transcript);
+      app.round.generatedPath = res.path;
       app.go('compare');
     } catch (e) { app.showError(String(e)); }
   })();
