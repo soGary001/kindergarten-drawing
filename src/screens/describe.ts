@@ -27,11 +27,11 @@ export function renderDescribe(root: HTMLElement, app: App) {
       </div>
     </div>
     <div id="words" style="font-family:var(--font-display);font-weight:700;font-size:clamp(15px,2.6vmin,26px);color:var(--ink);max-width:84vw;max-height:16vh;overflow-y:auto;min-height:1.3em;text-align:center;line-height:1.3"></div>
-    <div id="status" class="display" style="font-size:clamp(12px,2vmin,18px);color:var(--lav);min-height:20px;text-align:center"></div>
+    <div id="status" class="display" style="font-size:clamp(12px,2vmin,18px);color:var(--lav);min-height:20px;text-align:center;max-width:84vw"></div>
     <div id="timer" class="display" style="font-size:clamp(26px,5.5vmin,52px);color:var(--mint);min-height:1.1em"></div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center">
       <button class="btn hidden" id="again"><span class="en">🔄 Say again</span><span class="zh">重讲</span></button>
-      <button class="btn pink hidden" id="gen"><span class="en">✨ Generate</span><span class="zh">生成图片</span></button>
+      <button class="btn pink hidden" id="act"></button>
       <button class="btn pink hidden" id="modify"><span class="en">🔧 Modify</span><span class="zh">修改图片</span></button>
       <button class="btn mint hidden" id="done"><span class="en">✅ Done</span><span class="zh">完成</span></button>
     </div>
@@ -47,7 +47,7 @@ export function renderDescribe(root: HTMLElement, app: App) {
   const statusEl = el.querySelector<HTMLDivElement>('#status')!;
   const timerEl = el.querySelector<HTMLDivElement>('#timer')!;
   const againBtn = el.querySelector<HTMLButtonElement>('#again')!;
-  const genBtn = el.querySelector<HTMLButtonElement>('#gen')!;
+  const actBtn = el.querySelector<HTMLButtonElement>('#act')!;
   const modifyBtn = el.querySelector<HTMLButtonElement>('#modify')!;
   const doneBtn = el.querySelector<HTMLButtonElement>('#done')!;
   const overlay = el.querySelector<HTMLDivElement>('#overlay')!;
@@ -57,19 +57,20 @@ export function renderDescribe(root: HTMLElement, app: App) {
   let remaining = DURATION;
   let ticker: number | undefined;
   let cheerTimer: number | undefined;
-  let busy = false;       // generating/editing in progress
-  let finishing = false;  // time up → finish after this round
+  let busy = false;
+  let finishing = false;
   let ended = false;
+  let recording = false;
   let roundWords: string[] = [];
   let partial = '';
-  let currentUrl = '';    // remote url of current image (base for next edit)
-  let currentPath = '';   // local path of current image (for display + compare)
+  let currentUrl = '';
+  let currentPath = '';
   const unlisten: Array<Promise<() => void>> = [];
 
   function renderWords() {
     const confirmed = roundWords.join(' ');
     wordsEl.innerHTML = '';
-    if (!confirmed && !partial) { wordsEl.textContent = '… 👂'; return; }
+    if (!confirmed && !partial) { wordsEl.textContent = recording ? '… 👂' : ''; return; }
     const c = document.createElement('span'); c.textContent = confirmed + (partial ? ' ' : '');
     const p = document.createElement('span'); p.style.opacity = '0.45'; p.textContent = partial;
     wordsEl.appendChild(c); wordsEl.appendChild(p);
@@ -79,6 +80,7 @@ export function renderDescribe(root: HTMLElement, app: App) {
     timerEl.textContent = `⏱ ${remaining}`;
     timerEl.style.color = remaining <= 10 ? 'var(--pink)' : 'var(--mint)';
   }
+  // Timer ONLY runs while actively talking; paused otherwise.
   function startTimer() {
     if (ticker !== undefined) return;
     renderTimer();
@@ -89,30 +91,45 @@ export function renderDescribe(root: HTMLElement, app: App) {
   }
   function pauseTimer() { if (ticker !== undefined) { clearInterval(ticker); ticker = undefined; } }
 
-  unlisten.push(onEvent<string>('asr://partial', (s) => { partial = s; renderWords(); }));
-  unlisten.push(onEvent<string>('asr://final', (s) => { if (s.trim()) roundWords.push(s.trim()); partial = ''; renderWords(); }));
+  unlisten.push(onEvent<string>('asr://partial', (s) => { if (recording) { partial = s; renderWords(); } }));
+  unlisten.push(onEvent<string>('asr://final', (s) => { if (recording && s.trim()) { roundWords.push(s.trim()); partial = ''; renderWords(); } }));
   unlisten.push(onEvent<string>('asr://error', (e) => { statusEl.textContent = '⚠️ ' + e; }));
   function cleanup() { unlisten.forEach((u) => u.then((f) => f())); }
 
-  function setButtons(mode: 'first' | 'refine' | 'none') {
-    againBtn.classList.toggle('hidden', mode === 'none');
-    genBtn.classList.toggle('hidden', mode !== 'first');
-    modifyBtn.classList.toggle('hidden', mode !== 'refine');
-    doneBtn.classList.toggle('hidden', mode !== 'refine');
+  type Phase = 'talk' | 'idle' | 'none';
+  function setButtons(p: Phase) {
+    againBtn.classList.toggle('hidden', p !== 'talk');
+    actBtn.classList.toggle('hidden', p !== 'talk');
+    modifyBtn.classList.toggle('hidden', p !== 'idle');
+    doneBtn.classList.toggle('hidden', p !== 'idle');
   }
 
-  // Begin (or resume) listening for a new round of description.
-  async function listen() {
-    roundWords = []; partial = ''; renderWords();
-    statusEl.textContent = '🎤 Starting… 正在开启麦克风…';
+  // Start a talking round (round 1 = generate; later rounds = edit). Timer runs now.
+  async function startTalk() {
+    roundWords = []; partial = '';
     setButtons('none');
+    statusEl.textContent = '🎤 Starting… 正在开启麦克风…';
     try { await api.asrStart(); }
     catch (e) { app.showError(String(e)); return; }
-    setButtons(currentUrl ? 'refine' : 'first');
+    recording = true;
+    renderWords();
+    actBtn.innerHTML = currentUrl
+      ? '<span class="en">✅ Done speaking</span><span class="zh">说完了</span>'
+      : '<span class="en">✨ Generate</span><span class="zh">生成图片</span>';
+    setButtons('talk');
     statusEl.innerHTML = currentUrl
-      ? '🔴 想改什么就继续说,然后点「修改图片」 / Say what to change, then tap Modify'
-      : '🔴 看图说话吧!说完点「生成图片」 / Describe it, then tap Generate';
+      ? '🔴 说出要怎么改,说完点「说完了」 / Say what to change'
+      : '🔴 看图说话吧,说完点「生成图片」 / Describe it';
     startTimer();
+  }
+
+  // Image is shown; waiting for the child to decide. Timer PAUSED.
+  function enterIdle() {
+    recording = false;
+    pauseTimer();
+    renderWords();
+    setButtons('idle');
+    statusEl.innerHTML = '想继续改就点「修改图片」开始说,满意就点「完成」 / Tap Modify to keep changing, or Done';
   }
 
   function showOverlay(on: boolean) {
@@ -127,39 +144,32 @@ export function renderDescribe(root: HTMLElement, app: App) {
     }
   }
 
-  // Stop recording, pause clock, run gen/edit with music + cheers, then continue or finish.
-  async function runImage(kind: 'gen' | 'edit') {
+  // Stop recording, pause clock, run generate/edit (music + cheers), then idle or finish.
+  async function runImage() {
     if (busy) return;
     busy = true;
     pauseTimer();
+    recording = false;
     setButtons('none');
     try { await api.asrStop(); } catch { /* ignore */ }
     await new Promise((r) => setTimeout(r, 900)); // catch trailing final sentence(s)
     const text = roundWords.join(' ').trim();
+    const isEdit = !!currentUrl;
 
-    if (kind === 'edit' && !text) {
-      // nothing new said — just keep current image, resume listening
+    if (!text) {
       busy = false;
-      if (finishing) { finalize(); return; }
-      statusEl.textContent = '(没听到补充,继续说说看吧 / say what to change)';
-      listen();
-      return;
-    }
-    if (kind === 'gen' && !text) {
-      busy = false;
+      if (isEdit) { enterIdle(); statusEl.textContent = '(没听到补充 / nothing new said)'; return; }
+      // round 1 with no speech
       statusEl.textContent = "(没听清,再说一次吧 / let's try again)";
-      if (finishing) { finishing = false; } // give them another chance
-      listen();
+      finishing = false;
+      startTalk();
       return;
     }
-
-    if (kind === 'gen') app.round.transcript = text; // the original description
+    if (!isEdit) app.round.transcript = text;
 
     showOverlay(true);
     try {
-      const res = kind === 'gen'
-        ? await api.generateImage(text)
-        : await api.editImage(currentUrl, text);
+      const res = isEdit ? await api.editImage(currentUrl, text) : await api.generateImage(text);
       currentUrl = res.url; currentPath = res.path;
       app.round.generatedPath = res.path;
       aibox.style.fontSize = '0';
@@ -167,9 +177,8 @@ export function renderDescribe(root: HTMLElement, app: App) {
       showOverlay(false);
       playCelebration();
       busy = false;
-      if (finishing || remaining <= 0) { finalize(); return; }
-      statusEl.textContent = '✨ 看!可以继续补充修改,或点「完成」 / Like it? Add more, or tap Done';
-      listen();
+      if (finishing) { finalize(); return; }
+      enterIdle();
     } catch (e) {
       showOverlay(false);
       busy = false;
@@ -178,18 +187,18 @@ export function renderDescribe(root: HTMLElement, app: App) {
   }
 
   function onTimeUp() {
+    // Only fires while talking. Do one final generate/edit, then finish.
     pauseTimer();
-    if (busy) { finishing = true; return; } // finish right after current gen
     finishing = true;
-    if (!currentUrl) runImage('gen');                       // round 1 ran out → final generate
-    else if (roundWords.join('').trim()) runImage('edit');  // pending edit → apply then finish
-    else finalize();                                        // nothing new → finish with current image
+    if (busy) return;
+    runImage();
   }
 
   async function finalize() {
     if (ended) return; ended = true;
     pauseTimer();
     showOverlay(false);
+    recording = false;
     try { await api.asrStop(); } catch { /* ignore */ }
     cleanup();
     if (!app.round.generatedPath && currentPath) app.round.generatedPath = currentPath;
@@ -197,10 +206,10 @@ export function renderDescribe(root: HTMLElement, app: App) {
   }
 
   againBtn.onclick = () => { roundWords = []; partial = ''; renderWords(); statusEl.innerHTML = '🔄 重新说吧(时间继续) / say it again'; };
-  genBtn.onclick = () => runImage('gen');
-  modifyBtn.onclick = () => runImage('edit');
+  actBtn.onclick = () => runImage();
+  modifyBtn.onclick = () => startTalk();
   doneBtn.onclick = () => finalize();
 
   renderWords();
-  listen();
+  startTalk(); // round 1 auto-starts (right after drawing the card)
 }
