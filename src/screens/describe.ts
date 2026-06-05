@@ -194,15 +194,23 @@ export function renderDescribe(root: HTMLElement, app: App) {
     runImage();
   }
 
-  async function finalize() {
-    if (ended) return; ended = true;
+  let tornDown = false;
+  function teardown() {
+    if (tornDown) return; tornDown = true;
     pauseTimer();
-    showOverlay(false);
+    if (cheerTimer !== undefined) { clearInterval(cheerTimer); cheerTimer = undefined; }
+    stopEncourageMusic();
     recording = false;
-    try { await api.asrStop(); } catch { /* ignore */ }
+    api.asrStop().catch(() => {});
     cleanup();
+  }
+  // Runs on ANY navigation away (incl. the global Home button): stop mic/timer/music.
+  app.setLeaveHook(teardown);
+
+  function finalize() {
+    if (ended) return; ended = true;
     if (!app.round.generatedPath && currentPath) app.round.generatedPath = currentPath;
-    app.go('compare');
+    app.go('compare'); // leaveHook → teardown cleans up
   }
 
   againBtn.onclick = () => { roundWords = []; partial = ''; renderWords(); statusEl.innerHTML = '🔄 重新说吧(时间继续) / say it again'; };

@@ -12,6 +12,13 @@ export function renderDraw(root: HTMLElement, app: App) {
   const card = el.querySelector<HTMLDivElement>('#card')!;
   const drawBtn = el.querySelector<HTMLButtonElement>('#draw')!;
 
+  let spin: number | undefined;
+  let advance: number | undefined;
+  app.setLeaveHook(() => {
+    if (spin !== undefined) clearInterval(spin);
+    if (advance !== undefined) clearTimeout(advance);
+  });
+
   drawBtn.onclick = async () => {
     drawBtn.disabled = true;
     // Gather gallery images to flash as card faces during the shuffle.
@@ -32,15 +39,15 @@ export function renderDraw(root: HTMLElement, app: App) {
     const pool = faces.length ? faces : [finalUrl];
     let i = 0;
     const start = Date.now();
-    const spin = setInterval(() => {
+    spin = window.setInterval(() => {
       card.innerHTML = `<img src="${pool[i % pool.length]}" style="width:100%;height:100%;object-fit:cover;border-radius:16px"/>`;
       i++;
       if (Date.now() - start > 1200) {
-        clearInterval(spin);
+        if (spin !== undefined) clearInterval(spin);
         card.innerHTML = `<img src="${finalUrl}" class="pop" style="width:100%;height:100%;object-fit:cover;border-radius:16px"/>`;
         app.round.picture = pic;
         playCelebration();
-        setTimeout(() => app.go('describe'), 1300); // auto-advance — no confirm tap
+        advance = window.setTimeout(() => app.go('describe'), 1300); // auto-advance — no confirm tap
       }
     }, 90);
   };

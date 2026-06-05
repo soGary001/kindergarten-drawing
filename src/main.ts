@@ -31,6 +31,16 @@ async function boot() {
     generating: renderGenerating, compare: renderCompare,
   } as Record<Screen, any>, (m)=>showError(m, ()=>app.go('idle')));
 
+  // Global "back to home" button — quit any activity and return to the start screen.
+  const back = document.createElement('button');
+  back.id = 'backHome';
+  back.innerHTML = '🏠 <span style="font-size:.8em">返回 / Home</span>';
+  back.style.cssText = 'position:fixed;top:10px;left:12px;z-index:40;font-family:var(--font-display);font-weight:800;font-size:16px;padding:8px 16px;border:none;border-radius:999px;background:#fff;color:var(--ink);box-shadow:0 4px 0 var(--shadow-lav);cursor:pointer';
+  back.onclick = () => app.goHome();
+  document.body.appendChild(back);
+  // Hide it on the home screen itself.
+  app.setOnRender((screen) => { back.style.display = screen === 'idle' ? 'none' : 'block'; });
+
   mountSettings(app);
   const s = await api.getSettings();
   if (s.fullscreen) { await getCurrentWindow().setFullscreen(true); }
