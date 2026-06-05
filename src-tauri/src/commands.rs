@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager, State};
 
 #[derive(Default)]
 pub struct AppState {
-    pub recent: Mutex<Vec<usize>>,
+    pub drawn: Mutex<Vec<String>>, // ids already drawn this shuffle cycle
     pub mic: Mutex<Option<crate::mic::MicHandle>>,
     pub asr: Mutex<Option<crate::asr::AsrSession>>,
 }
@@ -47,10 +47,10 @@ pub fn draw_random(app: AppHandle, state: State<AppState>) -> Result<gallery::Im
     let s = settings::load(&app_data(&app));
     let all = gallery::scan(&active_gallery_dir(&app, &s));
     if all.is_empty() { return Err("gallery is empty".into()); }
-    let mut recent = state.recent.lock().unwrap();
-    let (idx, meta) = gallery::draw_random(&all, &recent).ok_or("draw failed")?;
-    recent.push(idx);
-    if recent.len() > 3 { recent.remove(0); }
+    let mut drawn = state.drawn.lock().unwrap();
+    let last = drawn.last().cloned();
+    let (meta, new_drawn) = gallery::next_draw(&all, &drawn, last.as_deref()).ok_or("draw failed")?;
+    *drawn = new_drawn;
     Ok(meta)
 }
 
