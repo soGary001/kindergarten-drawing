@@ -11,6 +11,20 @@ const CHEERS = [
   '再等一下下~ / Just a moment more~',
 ];
 
+// Fix common homophones the recognizer mishears in this picture-describing context.
+// (Kids say "sun", ASR often returns "son".) Whole-word, case-preserving.
+const HOMOPHONES: Record<string, string> = {
+  son: 'sun',
+  sons: 'suns',
+};
+function fixHomophones(text: string): string {
+  return text.replace(/[A-Za-z]+/g, (w) => {
+    const r = HOMOPHONES[w.toLowerCase()];
+    if (!r) return w;
+    return w[0] === w[0].toUpperCase() ? r[0].toUpperCase() + r.slice(1) : r;
+  });
+}
+
 export function renderDescribe(root: HTMLElement, app: App) {
   const el = document.createElement('div'); el.className = 'screen';
   const origUrl = app.round.picture ? fileUrl(app.round.picture.path) : '';
@@ -91,8 +105,8 @@ export function renderDescribe(root: HTMLElement, app: App) {
   }
   function pauseTimer() { if (ticker !== undefined) { clearInterval(ticker); ticker = undefined; } }
 
-  unlisten.push(onEvent<string>('asr://partial', (s) => { if (recording) { partial = s; renderWords(); } }));
-  unlisten.push(onEvent<string>('asr://final', (s) => { if (recording && s.trim()) { roundWords.push(s.trim()); partial = ''; renderWords(); } }));
+  unlisten.push(onEvent<string>('asr://partial', (s) => { if (recording) { partial = fixHomophones(s); renderWords(); } }));
+  unlisten.push(onEvent<string>('asr://final', (s) => { if (recording && s.trim()) { roundWords.push(fixHomophones(s.trim())); partial = ''; renderWords(); } }));
   unlisten.push(onEvent<string>('asr://error', (e) => { statusEl.textContent = '⚠️ ' + e; }));
   function cleanup() { unlisten.forEach((u) => u.then((f) => f())); }
 
