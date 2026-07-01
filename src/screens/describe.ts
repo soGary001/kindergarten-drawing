@@ -67,7 +67,7 @@ export function renderDescribe(root: HTMLElement, app: App) {
   const overlay = el.querySelector<HTMLDivElement>('#overlay')!;
   const cheerEl = el.querySelector<HTMLHeadingElement>('#cheer')!;
 
-  const DURATION = 60;
+  const DURATION = 30;
   let remaining = DURATION;
   let ticker: number | undefined;
   let cheerTimer: number | undefined;
